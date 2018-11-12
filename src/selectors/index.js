@@ -54,8 +54,39 @@ export const getFilteredEvents = createSelector(
           const event = Object.assign({}, value);
           acc[event.id] = event;
         }
+
         return acc;
     }, []);
+});
+
+/**
+ * Of all available events, selects those that fall within the time range,
+ * and if TAGS are being used, select them if their tags are enabled
+ */
+const parseTimestamp = ts => d3.timeParse("%Y-%m-%dT%H:%M:%S")(ts);
+export const getFilteredNarratives = createSelector(
+    [getEvents, getTagsFilter, getRangeFilter],
+    (events, tagFilters, rangeFilter) => {
+
+      const narratives = {};
+      events.forEach((evt) => {
+        const noTags = (tagFilters.length === 0 || !process.env.features.USE_TAGS || tagFilters.every(t => !t.active));
+
+        const isTagged = (noTags) || isTaggedIn(evt, tagFilters);
+        const isRange = (rangeFilter[0] < parseTimestamp(evt.timestamp)) &&
+            (parseTimestamp(evt.timestamp) < rangeFilter[1]);
+
+        if (isRange && isTagged && evt.narrative) {
+          if (!narratives[evt.narrative]) narratives[evt.narrative] = { key: evt.narrative, steps: [] };
+          narratives[evt.narrative].steps.push(evt);
+        }
+      });
+      Object.keys(narratives).forEach((key) => {
+        narratives[key].steps.sort((a, b) => {
+          return (parseTimestamp(a.timestamp) > parseTimestamp(b.timestamp));
+        });
+      })
+      return Object.values(narratives);
 });
 
 /**
